@@ -24,7 +24,6 @@ LEFT_KNEE = 26
 
 class ForceCurveEstimator(object):
     vid = True
-
     fig = plt.figure()
     ax = plt.axes(projection='3d')
 
@@ -68,24 +67,24 @@ class ForceCurveEstimator(object):
 
                     right = landmarks[RIGHT_WRIST].visibility > landmarks[LEFT_WRIST].visibility
 
+                    if right:
+                        shoulder = RIGHT_SHOULDER
+                        elbow = RIGHT_ELBOW
+                        hip = RIGHT_HIP
+                        wrist = RIGHT_WRIST
+                        knee = RIGHT_KNEE
+                    else:
+                        shoulder = LEFT_SHOULDER
+                        elbow = LEFT_ELBOW
+                        hip = LEFT_HIP
+                        wrist = LEFT_WRIST
+                        knee = LEFT_KNEE
+
                     if self.vid:
                         mp_drawing.draw_landmarks(
                             image,
                             subset,
                             landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
-
-                        if right:
-                            shoulder = RIGHT_SHOULDER
-                            elbow = RIGHT_ELBOW
-                            hip = RIGHT_HIP
-                            wrist = RIGHT_WRIST
-                            knee = RIGHT_KNEE
-                        else:
-                            shoulder = LEFT_SHOULDER
-                            elbow = LEFT_ELBOW
-                            hip = LEFT_HIP
-                            wrist = LEFT_WRIST
-                            knee = LEFT_KNEE
 
                         cv2.line(image,
                                  (int(landmarks[wrist].x * width), int(landmarks[wrist].y * height)),
@@ -104,19 +103,30 @@ class ForceCurveEstimator(object):
                                  (int(landmarks[knee].x * width), int(landmarks[knee].y * height)),
                                  (0, 255, 0), 2)
 
-                        self.process_angles({
+                        body_angle, elbow_angle, forearm_angle, leg_angle = self.process_angles({
                             "wrist": landmarks[wrist],
                             "elbow": landmarks[elbow],
                             "shoulder": landmarks[shoulder],
                             "hip": landmarks[hip],
                             "knee": landmarks[knee]
-                        })
+                        }, right)
+
+                        cv2.putText(image, "Right: " + str(right), (25, 25),
+                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                        cv2.putText(image, "Body Angle: " + str(body_angle)[0:6], (25, 50),
+                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                        cv2.putText(image, "Elbow Angle: " + str(elbow_angle)[0:6], (25, 75),
+                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                        cv2.putText(image, "Forearm Angle: " + str(forearm_angle)[0:6], (25, 100),
+                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                        cv2.putText(image, "Leg Angle: " + str(leg_angle)[0:6], (25, 125),
+                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
 
                         cv2.imshow('Force Curve Estimation', image)
                     else:
                         self.fig.canvas.flush_events()
 
-                        for lm in subset.landmark:
+                        for lm in landmarks:
                             self.ax.scatter(lm.x, lm.y, lm.z)
 
                         self.fig.canvas.draw()
@@ -129,7 +139,7 @@ class ForceCurveEstimator(object):
                 if wait & 0xFF == ord('q'):
                     break
                 elif wait & 0xFF == ord('w'):
-                    vid = not vid
+                    self.vid = not self.vid
                 elif wait & 0xFF == ord('e'):
                     paused = not paused
                     while paused:
@@ -138,7 +148,7 @@ class ForceCurveEstimator(object):
                             break
         self.cap.release()
 
-    def process_angles(self, landmarks):
+    def process_angles(self, landmarks, right):
         for lm in landmarks.values():
             if lm != landmarks["hip"]:
                 lm.x = lm.x - landmarks["hip"].x
@@ -146,17 +156,16 @@ class ForceCurveEstimator(object):
                 lm.z = lm.z - landmarks["hip"].z
         landmarks["hip"].x, landmarks["hip"].y, landmarks["hip"].z = 0, 0, 0
 
-        hip_angle = math.atan2(landmarks["shoulder"].y - landmarks["hip"].y,
-                               landmarks["shoulder"].x - landmarks["hip"].x)
-        elbow_angle = math.atan2(landmarks["elbow"].y - landmarks["shoulder"].y,
-                                 landmarks["elbow"].x - landmarks["shoulder"].x)
-        forearm_angle = math.atan2(landmarks["wrist"].y - landmarks["elbow"].y,
-                                 landmarks["wrist"].x - landmarks["elbow"].x)
+        body_angle = (90.0 * float(right)) - math.degrees(math.atan2(landmarks["shoulder"].y - landmarks["hip"].y,
+            landmarks["shoulder"].x - landmarks["hip"].x))
+        elbow_angle = math.degrees(math.atan2(landmarks["elbow"].y - landmarks["shoulder"].y,
+            landmarks["elbow"].x - landmarks["shoulder"].x))
+        forearm_angle = math.degrees(math.atan2(landmarks["wrist"].y - landmarks["elbow"].y,
+            landmarks["wrist"].x - landmarks["elbow"].x))
+        leg_angle = (90.0 * float(right)) - math.degrees(math.atan2(landmarks["knee"].y - landmarks["hip"].y,
+            landmarks["knee"].x - landmarks["hip"].x))
 
-        print(math.degrees(hip_angle))
-        print(math.degrees(elbow_angle))
-        print(math.degrees(forearm_angle))
-        print()
+        return body_angle, elbow_angle, forearm_angle, leg_angle
 
 
 if __name__ == "__main__":
