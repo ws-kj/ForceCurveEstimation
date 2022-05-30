@@ -1,0 +1,1 @@
+Estimating rowing force curves from footage using Mediapipe/OpenCV
