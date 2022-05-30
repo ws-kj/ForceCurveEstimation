@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 import cv2
 import mediapipe as mp
+import math
 from mediapipe.framework.formats import landmark_pb2
 
 mp_drawing = mp.solutions.drawing_utils
@@ -22,16 +23,19 @@ LEFT_KNEE = 26
 
 
 class ForceCurveEstimator(object):
-    @staticmethod
-    def load_single(source):
-        vid = True
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
+    vid = True
 
-        cap = cv2.VideoCapture(source)
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+
+    def __init__(self, source):
+        self.cap = cv2.VideoCapture(source)
+
+    def process_single(self):
+        paused = False
         with mp_pose.Pose(min_detection_confidence=0.75, min_tracking_confidence=0.75) as pose:
-            while cap.isOpened():
-                success, image = cap.read()
+            while self.cap.isOpened():
+                success, image = self.cap.read()
                 if not success:
                     break
 
@@ -64,7 +68,7 @@ class ForceCurveEstimator(object):
 
                     right = landmarks[RIGHT_WRIST].visibility > landmarks[LEFT_WRIST].visibility
 
-                    if vid:
+                    if self.vid:
                         mp_drawing.draw_landmarks(
                             image,
                             subset,
@@ -100,16 +104,24 @@ class ForceCurveEstimator(object):
                                  (int(landmarks[knee].x * width), int(landmarks[knee].y * height)),
                                  (0, 255, 0), 2)
 
+                        self.process_angles({
+                            "wrist": landmarks[wrist],
+                            "elbow": landmarks[elbow],
+                            "shoulder": landmarks[shoulder],
+                            "hip": landmarks[hip],
+                            "knee": landmarks[knee]
+                        })
+
                         cv2.imshow('Force Curve Estimation', image)
                     else:
-                        fig.canvas.flush_events()
+                        self.fig.canvas.flush_events()
 
                         for lm in subset.landmark:
-                            ax.scatter(lm.x, lm.y, lm.z)
+                            self.ax.scatter(lm.x, lm.y, lm.z)
 
-                        fig.canvas.draw()
-                        img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-                        img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                        self.fig.canvas.draw()
+                        img = np.fromstring(self.fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+                        img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
                         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                         cv2.imshow('Force Curve Estimation', img)
 
@@ -118,9 +130,35 @@ class ForceCurveEstimator(object):
                     break
                 elif wait & 0xFF == ord('w'):
                     vid = not vid
+                elif wait & 0xFF == ord('e'):
+                    paused = not paused
+                    while paused:
+                        if cv2.waitKey(1) & 0xFF == ord('e'):
+                            paused = not paused
+                            break
+        self.cap.release()
 
-        cap.release()
+    def process_angles(self, landmarks):
+        for lm in landmarks.values():
+            if lm != landmarks["hip"]:
+                lm.x = lm.x - landmarks["hip"].x
+                lm.y = lm.y - landmarks["hip"].y
+                lm.z = lm.z - landmarks["hip"].z
+        landmarks["hip"].x, landmarks["hip"].y, landmarks["hip"].z = 0, 0, 0
+
+        hip_angle = math.atan2(landmarks["shoulder"].y - landmarks["hip"].y,
+                               landmarks["shoulder"].x - landmarks["hip"].x)
+        elbow_angle = math.atan2(landmarks["elbow"].y - landmarks["shoulder"].y,
+                                 landmarks["elbow"].x - landmarks["shoulder"].x)
+        forearm_angle = math.atan2(landmarks["wrist"].y - landmarks["elbow"].y,
+                                 landmarks["wrist"].x - landmarks["elbow"].x)
+
+        print(math.degrees(hip_angle))
+        print(math.degrees(elbow_angle))
+        print(math.degrees(forearm_angle))
+        print()
 
 
 if __name__ == "__main__":
-    ForceCurveEstimator.load_single("footage/1x.mp4")
+    model = ForceCurveEstimator("footage/1x.mp4")
+    model.process_single()
