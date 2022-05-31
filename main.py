@@ -42,7 +42,7 @@ class ForceCurveEstimator(object):
                 height = image.shape[0]
 
                 image.flags.writeable = False
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                 results = pose.process(image)
 
                 if results.pose_landmarks:
@@ -113,13 +113,13 @@ class ForceCurveEstimator(object):
 
                         cv2.putText(image, "Right: " + str(right), (25, 25),
                                     cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Body Angle: " + str(body_angle)[0:6], (25, 50),
+                        cv2.putText(image, "Body Angle: " + str(body_angle), (25, 50),
                                     cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Elbow Angle: " + str(elbow_angle)[0:6], (25, 75),
+                        cv2.putText(image, "Elbow Angle: " + str(elbow_angle), (25, 75),
                                     cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Forearm Angle: " + str(forearm_angle)[0:6], (25, 100),
+                        cv2.putText(image, "Forearm Angle: " + str(forearm_angle), (25, 100),
                                     cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Leg Angle: " + str(leg_angle)[0:6], (25, 125),
+                        cv2.putText(image, "Leg Angle: " + str(leg_angle), (25, 125),
                                     cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
 
                         cv2.imshow('Force Curve Estimation', image)
@@ -156,8 +156,13 @@ class ForceCurveEstimator(object):
                 lm.z = lm.z - landmarks["hip"].z
         landmarks["hip"].x, landmarks["hip"].y, landmarks["hip"].z = 0, 0, 0
 
-        body_angle = (90.0 * float(right)) - math.degrees(math.atan2(landmarks["shoulder"].y - landmarks["hip"].y,
-            landmarks["shoulder"].x - landmarks["hip"].x))
+        if right:
+            body_angle = -1 * math.degrees(math.atan2(landmarks["shoulder"].y - landmarks["hip"].y,
+                landmarks["shoulder"].x - landmarks["hip"].x)) - 90
+        else:
+            body_angle = math.degrees(math.atan2(landmarks["shoulder"].y - landmarks["hip"].y,
+                landmarks["shoulder"].x - landmarks["hip"].x)) + 90
+
         elbow_angle = math.degrees(math.atan2(landmarks["elbow"].y - landmarks["shoulder"].y,
             landmarks["elbow"].x - landmarks["shoulder"].x))
         forearm_angle = math.degrees(math.atan2(landmarks["wrist"].y - landmarks["elbow"].y,
@@ -165,7 +170,7 @@ class ForceCurveEstimator(object):
         leg_angle = (90.0 * float(right)) - math.degrees(math.atan2(landmarks["knee"].y - landmarks["hip"].y,
             landmarks["knee"].x - landmarks["hip"].x))
 
-        return body_angle, elbow_angle, forearm_angle, leg_angle
+        return int(body_angle), int(elbow_angle), int(forearm_angle), int(leg_angle)
 
 
 if __name__ == "__main__":
