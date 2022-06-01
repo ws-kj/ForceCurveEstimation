@@ -20,6 +20,8 @@ RIGHT_HIP = 23
 LEFT_HIP = 24
 RIGHT_KNEE = 25
 LEFT_KNEE = 26
+RIGHT_ANKLE = 29
+LEFT_ANKLE = 30
 
 
 class ForceCurveEstimator(object):
@@ -31,6 +33,14 @@ class ForceCurveEstimator(object):
         self.cap = cv2.VideoCapture(source)
 
     def process_single(self):
+        leg_drive = 0
+        ld_delta = 0
+        prev_ld = 0
+        body_angle = 0
+        ba_delta = 0
+        prev_ba = 0
+        drive = True
+
         paused = False
         with mp_pose.Pose(min_detection_confidence=0.75, min_tracking_confidence=0.75) as pose:
             while self.cap.isOpened():
@@ -57,6 +67,8 @@ class ForceCurveEstimator(object):
                         results.pose_landmarks.landmark[LEFT_HIP],
                         results.pose_landmarks.landmark[RIGHT_KNEE],
                         results.pose_landmarks.landmark[LEFT_KNEE],
+                        results.pose_landmarks.landmark[RIGHT_ANKLE],
+                        results.pose_landmarks.landmark[LEFT_ANKLE]
                     ])
 
                     landmarks = results.pose_landmarks.landmark
@@ -73,73 +85,80 @@ class ForceCurveEstimator(object):
                         hip = RIGHT_HIP
                         wrist = RIGHT_WRIST
                         knee = RIGHT_KNEE
+                        ankle = RIGHT_ANKLE
                     else:
                         shoulder = LEFT_SHOULDER
                         elbow = LEFT_ELBOW
                         hip = LEFT_HIP
                         wrist = LEFT_WRIST
                         knee = LEFT_KNEE
+                        ankle = LEFT_ANKLE
 
-                    if self.vid:
-                        mp_drawing.draw_landmarks(
-                            image,
-                            subset,
-                            landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+                    mp_drawing.draw_landmarks(
+                        image,
+                        subset,
+                        landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
 
-                        cv2.line(image,
-                                 (int(landmarks[wrist].x * width), int(landmarks[wrist].y * height)),
-                                 (int(landmarks[elbow].x * width), int(landmarks[elbow].y * height)),
-                                 (0, 255, 0), 2)
-                        cv2.line(image,
-                                 (int(landmarks[elbow].x * width), int(landmarks[elbow].y * height)),
-                                 (int(landmarks[shoulder].x * width), int(landmarks[shoulder].y * height)),
-                                 (0, 255, 0), 2)
-                        cv2.line(image,
-                                 (int(landmarks[shoulder].x * width), int(landmarks[shoulder].y * height)),
-                                 (int(landmarks[hip].x * width), int(landmarks[hip].y * height)),
-                                 (0, 255, 0), 2)
-                        cv2.line(image,
-                                 (int(landmarks[hip].x * width), int(landmarks[hip].y * height)),
-                                 (int(landmarks[knee].x * width), int(landmarks[knee].y * height)),
-                                 (0, 255, 0), 2)
+                    cv2.line(image,
+                             (int(landmarks[wrist].x * width), int(landmarks[wrist].y * height)),
+                             (int(landmarks[elbow].x * width), int(landmarks[elbow].y * height)),
+                             (0, 255, 0), 2)
+                    cv2.line(image,
+                             (int(landmarks[elbow].x * width), int(landmarks[elbow].y * height)),
+                             (int(landmarks[shoulder].x * width), int(landmarks[shoulder].y * height)),
+                             (0, 255, 0), 2)
+                    cv2.line(image,
+                             (int(landmarks[shoulder].x * width), int(landmarks[shoulder].y * height)),
+                             (int(landmarks[hip].x * width), int(landmarks[hip].y * height)),
+                             (0, 255, 0), 2)
+                    cv2.line(image,
+                             (int(landmarks[hip].x * width), int(landmarks[hip].y * height)),
+                             (int(landmarks[knee].x * width), int(landmarks[knee].y * height)),
+                             (0, 255, 0), 2)
 
-                        body_angle, elbow_angle, forearm_angle, leg_angle = self.process_angles({
-                            "wrist": landmarks[wrist],
-                            "elbow": landmarks[elbow],
-                            "shoulder": landmarks[shoulder],
-                            "hip": landmarks[hip],
-                            "knee": landmarks[knee]
-                        }, right)
+                    body_angle, elbow_angle, forearm_angle, leg_angle = self.process_angles({
+                        "wrist": landmarks[wrist],
+                        "elbow": landmarks[elbow],
+                        "shoulder": landmarks[shoulder],
+                        "hip": landmarks[hip],
+                        "knee": landmarks[knee]
+                    }, right)
 
-                        cv2.putText(image, "Right: " + str(right), (25, 25),
-                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Body Angle: " + str(body_angle), (25, 50),
-                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Elbow Angle: " + str(elbow_angle), (25, 75),
-                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Forearm Angle: " + str(forearm_angle), (25, 100),
-                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
-                        cv2.putText(image, "Leg Angle: " + str(leg_angle), (25, 125),
-                                    cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                    #leg_drive = math.sqrt(math.pow(landmarks[ankle].x - landmarks[hip].x, 2) +
+                    #                      math.pow(landmarks[ankle].y - landmarks[hip].y, 2))
 
-                        cv2.imshow('Force Curve Estimation', image)
+                    leg_drive = landmarks[knee].x * width - landmarks[hip].x * width
+
+                    ba_delta = prev_ba - body_angle
+                    ld_delta = prev_ld - leg_drive
+                    prev_ba = body_angle
+                    prev_ld = leg_drive
+
+                    if not drive:
+                        if ba_delta > 1:
+                            drive = (False, True)[not drive]
                     else:
-                        self.fig.canvas.flush_events()
+                        if ba_delta < 1:
+                            drive = (True, False)[drive]
 
-                        for lm in landmarks:
-                            self.ax.scatter(lm.x, lm.y, lm.z)
+                    cv2.putText(image, "Right: " + str(right), (25, 25),
+                                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                    cv2.putText(image, "Drive: " + str(drive) + " " + str(ba_delta), (25, 50),
+                                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                    cv2.putText(image, "Body Angle: " + str(body_angle), (25, 75),
+                                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                    cv2.putText(image, "Elbow Angle: " + str(elbow_angle), (25, 100),
+                                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                    cv2.putText(image, "Forearm Angle: " + str(forearm_angle), (25, 125),
+                                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
+                    cv2.putText(image, "Leg Angle: " + str(leg_angle), (25, 150),
+                                cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255))
 
-                        self.fig.canvas.draw()
-                        img = np.fromstring(self.fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-                        img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
-                        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                        cv2.imshow('Force Curve Estimation', img)
+                    cv2.imshow('Force Curve Estimation', image)
 
                 wait = cv2.waitKey(10)
                 if wait & 0xFF == ord('q'):
                     break
-                elif wait & 0xFF == ord('w'):
-                    self.vid = not self.vid
                 elif wait & 0xFF == ord('e'):
                     paused = not paused
                     while paused:
